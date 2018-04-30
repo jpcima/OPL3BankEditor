@@ -26,6 +26,7 @@
 #include <vector>
 #include <chrono>
 #include <cmath>
+#include <cassert>
 #include <memory>
 
 #include "measurer.h"
@@ -49,6 +50,111 @@ struct DurationInfo
     bool        nosound;
     uint8_t     padding[7];
 };
+
+struct NoteInfo
+{
+    unsigned block;
+    unsigned fnum;
+};
+
+struct EnvelopeInfo
+{
+    NoteInfo note;
+    int ar;
+    int dr;
+    int sl;
+    int rr;
+    int tl;
+    bool nts;
+    bool ksr;
+    int ksl;
+    bool sustained;
+    unsigned wave;
+};
+
+static unsigned effective_rate(
+    unsigned rate, unsigned ksr, unsigned nts, unsigned fnum, unsigned block)
+{
+    unsigned effective_rate = 4 * rate;
+    if (!ksr)
+        effective_rate += block >> 1;
+    else
+        effective_rate += (block << 1) | ((fnum >> (9 - nts)) & 1);
+    return effective_rate;
+}
+
+static double wave_rms(unsigned wave)
+{
+    static constexpr double opl3_wave_rms[8] = {
+        0.70561416881800276, 0.38471346311423527,
+        0.30705309587280949, 0.38471346311423527,
+        0.49798248543363655, 0.38426129383516933,
+        0.99767965006992609, 0.21419520618172677,
+    };
+    return opl3_wave_rms[wave & 7];
+}
+
+static double solve_attack(
+    double vrms, const EnvelopeInfo egp[], unsigned egcount)
+{
+    // attack phase approx: E(t,r) = 1-exp(-a*b^(r+c)*t)
+    static constexpr double attack_a = 1.149779557179130,
+                            attack_b = 1.189578077537087,
+                            attack_c = -1.771203939904738;
+
+    constexpr unsigned egmax = 6; /* 2 notes, 3 carriers */
+    assert(egcount <= egmax);
+
+    // ksl tables from nuked
+    static const uint8_t kslrom[16] =
+        { 0, 32, 40, 45, 48, 51, 53, 55, 56, 58, 59, 60, 61, 62, 63, 64 };
+    static const uint8_t kslshift[4] =
+        { 8, 1, 2, 0 };
+
+    // precompute the constant rate argument
+    double arg[egmax];
+    for (unsigned i = 0; i < egcount; ++i) {
+        unsigned eff_rate = effective_rate(egp[i].ar, egp[i].ksr, egp[i].nts, egp[i].note.fnum, egp[i].note.block);
+        arg[i] = -attack_a * std::pow(attack_b, eff_rate + attack_c);
+    }
+
+    // evaluator of total rms level at time t
+    auto evaluate =
+        [&arg, &egp, egcount](double t) -> double
+            {
+                double v = 0.0;
+                for (unsigned i = 0; i < egcount; ++i) {
+                    // compute basic envelope
+                    double e = 1.0 - std::exp(t * arg[i]);
+// fprintf(stderr, "1. E(%u) = %f\n", i, e);
+                    // apply level modifications
+                    double tlv = (egp[i].tl << 2) / 512.0;
+                    double kslv = (((kslrom[egp[i].note.fnum >> 6] << 2) - ((8 - egp[i].note.block) << 5)) >> kslshift[egp[i].ksl]) / 512.0;
+// fprintf(stderr, "TL %f (%u) KSL %f (%u)\n",
+        // tlv, egp[i].tl, kslv, egp[i].ksl);
+                    e -= tlv + kslv;
+// fprintf(stderr, "2. E(%u) = %f\n", i, e);
+                    e = (e > 0) ? e : 0;
+                    // compute rms modulated with envelope
+                    double w = e * wave_rms(egp[i].wave);
+                    v += w * w;
+                }
+                // compute rms total
+                return std::sqrt(v);
+            };
+
+    // find t by binary search
+    double t1 = 0.0, t2 = 10.0;
+    double t = (t2 - t1) * 0.5;
+    constexpr unsigned iterations = 16;  /* increase for precision */
+    for (unsigned i = 0; i < iterations; ++i) {
+        double v = evaluate(t);
+        if (vrms < v) { t2 = t; }
+        else { t1 = t; }
+        t = (t2 - t1) * 0.5;
+    }
+    return t;
+}
 
 static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
 {
@@ -76,6 +182,8 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
         WRITE_REG((uint16_t)initdata[a], (uint8_t)initdata[a + 1]);
 
     const unsigned n_notes = in.en_4op || in.en_pseudo4op ? 2 : 1;
+    enum { max_notes = 2 };
+
     unsigned x[2] = {0, 0};
     if(n_notes == 2 && !in.en_pseudo4op)
     {
@@ -118,8 +226,12 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
         WRITE_REG(patchdata[10] + n * 8, rawData[n][10] | 0x30);
     }
 
+    NoteInfo notes[max_notes];
+
     for(unsigned n = 0; n < n_notes; ++n)
     {
+        NoteInfo &note = notes[n];
+
         double hertz = 172.00093 * std::exp(0.057762265 * (notenum + in.fine_tune));
         if(hertz > 131071)
         {
@@ -128,17 +240,79 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
             hertz = 131071;
         }
         x[n] = 0x2000;
+
+        note.block = 0;
         while(hertz >= 1023.5)
         {
             hertz /= 2.0;    // Calculate octave
-            x[n] += 0x400;
+            ++note.block;
         }
-        x[n] += (unsigned int)(hertz + 0.5);
+        x[n] += note.block * 0x400;
+
+        note.fnum = (unsigned int)(hertz + 0.5);
+        x[n] += note.fnum;
 
         // Keyon the note
         WRITE_REG(0xA0 + n * 3, x[n] & 0xFF);
         WRITE_REG(0xB0 + n * 3, x[n] >> 8);
     }
+
+    enum { max_algorithms = 6, max_carriers = 3 };
+
+    unsigned algorithm = in.getFBConn1() & 1;
+    if(in.en_4op || in.en_pseudo4op)
+        algorithm = 2 + (algorithm | ((in.getFBConn2() & 1) << 1));
+
+    uint8_t carriers[max_carriers];
+    unsigned num_carriers = 0;
+
+    switch(algorithm)
+    {
+    case 0:
+        carriers[num_carriers++] = 0;
+        carriers[num_carriers++] = 1;
+        break;
+    case 1:
+        carriers[num_carriers++] = 1;
+        break;
+    case 2:
+        carriers[num_carriers++] = 3;
+        break;
+    case 3:
+        carriers[num_carriers++] = 0;
+        carriers[num_carriers++] = 3;
+        break;
+    case 4:
+        carriers[num_carriers++] = 1;
+        carriers[num_carriers++] = 3;
+        break;
+    case 5:
+        carriers[num_carriers++] = 0;
+        carriers[num_carriers++] = 2;
+        carriers[num_carriers++] = 3;
+        break;
+    }
+
+    EnvelopeInfo envelopes[max_carriers * max_notes];
+    for(unsigned i = 0; i < num_carriers * n_notes; ++i)
+    {
+        EnvelopeInfo &env = envelopes[i];
+        env.note = notes[i / num_carriers];
+        unsigned op = carriers[i];
+        env.ar = in.OP[op].attack;
+        env.dr = in.OP[op].decay;
+        env.sl = in.OP[op].sustain;
+        env.rr = in.OP[op].release;
+        env.tl = in.OP[op].level;
+        env.nts = false;  // is this good?
+        env.ksr = in.OP[op].ksr;
+        env.ksl = in.OP[op].ksl;
+        env.sustained = in.OP[op].eg;
+        env.wave = in.OP[op].waveform;
+    }
+
+    // TODO it's not correct level to check for
+    double solver_attack_time = solve_attack(0.2, envelopes, num_carriers);
 
     const unsigned max_silent = 6;
     const unsigned max_on  = 40;
@@ -266,6 +440,9 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
     result.ms_sound_kon  = (int64_t)(quarter_amplitude_time * 1000.0 / interval);
     result.ms_sound_koff = (int64_t)(keyoff_out_time        * 1000.0 / interval);
     result.nosound = (peak_amplitude_value < 0.5) || ((sound_min >= -1) && (sound_max <= 1));
+
+    fprintf(stderr, "Attack time (ms) %ld real, %ld estimate\n",
+        result.ms_sound_kon, (int64_t)(solver_attack_time * 1000));
 
     in.ms_sound_kon = (uint16_t)result.ms_sound_kon;
     in.ms_sound_koff = (uint16_t)result.ms_sound_koff;
