@@ -94,6 +94,18 @@ static double wave_rms(unsigned wave)
     return opl3_wave_rms[wave & 7];
 }
 
+static double level_modifier(NoteInfo note, int tl, int ksl)
+{
+    // ksl tables from nuked
+    static const uint8_t kslrom[16] =
+        { 0, 32, 40, 45, 48, 51, 53, 55, 56, 58, 59, 60, 61, 62, 63, 64 };
+    static const uint8_t kslshift[4] =
+        { 8, 1, 2, 0 };
+    double tlv = (tl << 2) / 512.0;
+    double kslv = (((kslrom[note.fnum >> 6] << 2) - ((8 - note.block) << 5)) >> kslshift[ksl]) / 512.0;
+    return tlv + kslv;
+}
+
 static double solve_attack(
     double vrms, const EnvelopeInfo egp[], unsigned egcount)
 {
@@ -105,35 +117,26 @@ static double solve_attack(
     constexpr unsigned egmax = 6; /* 2 notes, 3 carriers */
     assert(egcount <= egmax);
 
-    // ksl tables from nuked
-    static const uint8_t kslrom[16] =
-        { 0, 32, 40, 45, 48, 51, 53, 55, 56, 58, 59, 60, 61, 62, 63, 64 };
-    static const uint8_t kslshift[4] =
-        { 8, 1, 2, 0 };
-
     // precompute the constant rate argument
     double arg[egmax];
+    // and the level modifier
+    double lmod[egmax];
     for (unsigned i = 0; i < egcount; ++i) {
         unsigned eff_rate = effective_rate(egp[i].ar, egp[i].ksr, egp[i].nts, egp[i].note.fnum, egp[i].note.block);
         arg[i] = -attack_a * std::pow(attack_b, eff_rate + attack_c);
+        lmod[i] = level_modifier(egp[i].note, egp[i].tl, egp[i].ksl);
     }
 
     // evaluator of total rms level at time t
     auto evaluate =
-        [&arg, &egp, egcount](double t) -> double
+        [&arg, &lmod, &egp, egcount](double t) -> double
             {
                 double v = 0.0;
                 for (unsigned i = 0; i < egcount; ++i) {
                     // compute basic envelope
                     double e = 1.0 - std::exp(t * arg[i]);
-// fprintf(stderr, "1. E(%u) = %f\n", i, e);
                     // apply level modifications
-                    double tlv = (egp[i].tl << 2) / 512.0;
-                    double kslv = (((kslrom[egp[i].note.fnum >> 6] << 2) - ((8 - egp[i].note.block) << 5)) >> kslshift[egp[i].ksl]) / 512.0;
-// fprintf(stderr, "TL %f (%u) KSL %f (%u)\n",
-        // tlv, egp[i].tl, kslv, egp[i].ksl);
-                    e -= tlv + kslv;
-// fprintf(stderr, "2. E(%u) = %f\n", i, e);
+                    e -= lmod[i];
                     e = (e > 0) ? e : 0;
                     // compute rms modulated with envelope
                     double w = e * wave_rms(egp[i].wave);
@@ -154,6 +157,95 @@ static double solve_attack(
         t = (t2 - t1) * 0.5;
     }
     return t;
+}
+
+static double solve_release(
+    double vrms, const EnvelopeInfo egp[], unsigned egcount)
+{
+    // release phase approx: E(t,r) = 1-a*b^(r+c)*t
+    static constexpr double release_a = 0.010612748520266,
+                            release_b = 1.185551946574785,
+                            release_c = 1.013799170930869;
+
+    constexpr unsigned egmax = 6; /* 2 notes, 3 carriers */
+    assert(egcount <= egmax);
+
+    // precompute the constant rate argument
+    double arg[egmax];
+    // and the level modifier
+    double lmod[egmax];
+    for (unsigned i = 0; i < egcount; ++i) {
+        unsigned eff_rate = effective_rate(egp[i].ar, egp[i].ksr, egp[i].nts, egp[i].note.fnum, egp[i].note.block);
+        arg[i] = -release_a * std::pow(release_b, eff_rate + release_c);
+        lmod[i] = (egp[i].sustained) ? ((egp[i].sl << 4) / 512.0) : 0.0;
+        lmod[i] += level_modifier(egp[i].note, egp[i].tl, egp[i].ksl);
+    }
+
+    // evaluator of total rms level at time t
+    auto evaluate =
+        [&arg, &lmod, &egp, egcount](double t) -> double
+            {
+                double v = 0.0;
+                for (unsigned i = 0; i < egcount; ++i) {
+                    // compute basic envelope
+                    double e = 1.0 + t * arg[i];
+                    // apply level modifications
+                    e -= lmod[i];
+                    e = (e > 0) ? e : 0;
+                    // compute rms modulated with envelope
+                    double w = e * wave_rms(egp[i].wave);
+                    v += w * w;
+                }
+                // compute rms total
+                return std::sqrt(v);
+            };
+
+    // find t by binary search
+    double t1 = 0.0, t2 = 50.0;
+    double t = (t2 - t1) * 0.5;
+    constexpr unsigned iterations = 16;  /* increase for precision */
+    for (unsigned i = 0; i < iterations; ++i) {
+        double v = evaluate(t);
+        if (vrms < v) { t2 = t; }
+        else { t1 = t; }
+        t = (t2 - t1) * 0.5;
+    }
+    return t;
+}
+
+static double solve_release_faster(
+    double vrms, const EnvelopeInfo egp[], unsigned egcount)
+{
+    // release phase approx: E(t,r) = 1-a*b^(r+c)*t
+    static constexpr double release_a = 0.010612748520266,
+                            release_b = 1.185551946574785,
+                            release_c = 1.013799170930869;
+
+    double poly[3] = {- vrms * vrms, 0, 0};
+
+    // compute second degree polynomial
+    for (unsigned i = 0; i < egcount; ++i) {
+        unsigned eff_rate = effective_rate(egp[i].ar, egp[i].ksr, egp[i].nts, egp[i].note.fnum, egp[i].note.block);
+        double r = release_a * std::pow(release_b, eff_rate + release_c);
+        double lmod = (egp[i].sustained) ? ((egp[i].sl << 4) / 512.0) : 0.0;
+        lmod += level_modifier(egp[i].note, egp[i].tl, egp[i].ksl);
+        double v = 1.0 - lmod;
+        v = (v > 0) ? v : 0;
+        double w = wave_rms(egp[i].wave);
+        poly[0] += v * v * w * w;
+        poly[1] += -2 * r * v * w * w;
+        poly[2] += r * r * w * w;
+    }
+
+    // solve t
+    double delta = poly[1] * poly[1] - 4 * poly[2] * poly[0];  // b^2-4ac
+    if (delta < 0)  // no real solutions
+        return HUGE_VAL;
+    delta = std::sqrt(delta);
+    double sol1 = (-poly[1] + delta) / (2 * poly[2]);
+    double sol2 = (-poly[1] - delta) / (2 * poly[2]);
+//fprintf(stderr, "SOLUTION %f %f\n", sol1, sol2);
+    return std::max(sol1, sol2);
 }
 
 static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
@@ -313,6 +405,8 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
 
     // TODO it's not correct level to check for
     double solver_attack_time = solve_attack(0.2, envelopes, num_carriers);
+    double solver_release_time = solve_release(0.2, envelopes, num_carriers);
+    double solver_release2_time = solve_release_faster(0.2, envelopes, num_carriers);
 
     const unsigned max_silent = 6;
     const unsigned max_on  = 40;
@@ -441,8 +535,10 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
     result.ms_sound_koff = (int64_t)(keyoff_out_time        * 1000.0 / interval);
     result.nosound = (peak_amplitude_value < 0.5) || ((sound_min >= -1) && (sound_max <= 1));
 
-    fprintf(stderr, "Attack time (ms) %ld real, %ld estimate\n",
-        result.ms_sound_kon, (int64_t)(solver_attack_time * 1000));
+    fprintf(stderr, "Attack time (ms) %ld real, %f estimate\n",
+        result.ms_sound_kon, solver_attack_time * 1000);
+    fprintf(stderr, "Release time (ms) %ld real, %f estimate %f estimate2\n",
+        result.ms_sound_koff, solver_release_time * 1000, solver_release2_time * 1000);
 
     in.ms_sound_kon = (uint16_t)result.ms_sound_kon;
     in.ms_sound_koff = (uint16_t)result.ms_sound_koff;
