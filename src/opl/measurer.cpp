@@ -101,9 +101,12 @@ static double level_modifier(NoteInfo note, int tl, int ksl)
         { 0, 32, 40, 45, 48, 51, 53, 55, 56, 58, 59, 60, 61, 62, 63, 64 };
     static const uint8_t kslshift[4] =
         { 8, 1, 2, 0 };
-    double tlv = (tl << 2) / 512.0;
-    double kslv = (((kslrom[note.fnum >> 6] << 2) - ((8 - note.block) << 5)) >> kslshift[ksl]) / 512.0;
-    return tlv + kslv;
+
+    int tli = tl << 2;
+    int ksli = (kslrom[note.fnum >> 6] << 2) - ((8 - note.block) << 5);
+    ksli = (ksli > 0) ? ksli : 0;
+    ksli >>= kslshift[ksl];
+    return (tli + ksli) / 512.0;
 }
 
 static double solve_attack(
@@ -148,13 +151,13 @@ static double solve_attack(
 
     // find t by binary search
     double t1 = 0.0, t2 = 10.0;
-    double t = (t2 - t1) * 0.5;
+    double t = (t2 + t1) * 0.5;
     constexpr unsigned iterations = 16;  /* increase for precision */
     for (unsigned i = 0; i < iterations; ++i) {
         double v = evaluate(t);
         if (vrms < v) { t2 = t; }
         else { t1 = t; }
-        t = (t2 - t1) * 0.5;
+        t = (t2 + t1) * 0.5;
     }
     return t;
 }
@@ -202,13 +205,13 @@ static double solve_release(
 
     // find t by binary search
     double t1 = 0.0, t2 = 50.0;
-    double t = (t2 - t1) * 0.5;
+    double t = (t2 + t1) * 0.5;
     constexpr unsigned iterations = 16;  /* increase for precision */
     for (unsigned i = 0; i < iterations; ++i) {
         double v = evaluate(t);
-        if (vrms < v) { t2 = t; }
+        if (vrms > v) { t2 = t; }
         else { t1 = t; }
-        t = (t2 - t1) * 0.5;
+        t = (t2 + t1) * 0.5;
     }
     return t;
 }
@@ -244,7 +247,6 @@ static double solve_release_faster(
     delta = std::sqrt(delta);
     double sol1 = (-poly[1] + delta) / (2 * poly[2]);
     double sol2 = (-poly[1] - delta) / (2 * poly[2]);
-//fprintf(stderr, "SOLUTION %f %f\n", sol1, sol2);
     return std::max(sol1, sol2);
 }
 
@@ -361,27 +363,27 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
     switch(algorithm)
     {
     case 0:
-        carriers[num_carriers++] = 0;
-        carriers[num_carriers++] = 1;
+        carriers[num_carriers++] = MODULATOR1;
+        carriers[num_carriers++] = CARRIER1;
         break;
     case 1:
-        carriers[num_carriers++] = 1;
+        carriers[num_carriers++] = CARRIER1;
         break;
     case 2:
-        carriers[num_carriers++] = 3;
+        carriers[num_carriers++] = CARRIER2;
         break;
     case 3:
-        carriers[num_carriers++] = 0;
-        carriers[num_carriers++] = 3;
+        carriers[num_carriers++] = MODULATOR1;
+        carriers[num_carriers++] = CARRIER2;
         break;
     case 4:
-        carriers[num_carriers++] = 1;
-        carriers[num_carriers++] = 3;
+        carriers[num_carriers++] = CARRIER1;
+        carriers[num_carriers++] = CARRIER2;
         break;
     case 5:
-        carriers[num_carriers++] = 0;
-        carriers[num_carriers++] = 2;
-        carriers[num_carriers++] = 3;
+        carriers[num_carriers++] = MODULATOR1;
+        carriers[num_carriers++] = MODULATOR2;
+        carriers[num_carriers++] = CARRIER2;
         break;
     }
 
