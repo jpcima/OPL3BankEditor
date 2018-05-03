@@ -72,6 +72,13 @@ struct EnvelopeInfo
     unsigned wave;
 };
 
+static void print_envelope_info(FILE *fh, const EnvelopeInfo &e)
+{
+    fprintf(fh, "note={%u,%u} ar=%d dr=%d sl=%d rr=%d tl=%d nts=%d ksr=%d ksl=%d sustained=%d wave=%u",
+        e.note.block, e.note.fnum,
+        e.ar, e.dr, e.sl, e.rr, e.tl, e.nts, e.ksr, e.ksl, e.sustained, e.wave);
+}
+
 static unsigned effective_rate(
     unsigned rate, unsigned ksr, unsigned nts, unsigned fnum, unsigned block)
 {
@@ -155,6 +162,7 @@ static double solve_attack(
     constexpr unsigned iterations = 16;  /* increase for precision */
     for (unsigned i = 0; i < iterations; ++i) {
         double v = evaluate(t);
+//fprintf(stderr, "attack iteration %u: t=%f v=%f vt=%f\n", i + 1, t, v, vrms);
         if (vrms < v) { t2 = t; }
         else { t1 = t; }
         t = (t2 + t1) * 0.5;
@@ -209,6 +217,7 @@ static double solve_release(
     constexpr unsigned iterations = 16;  /* increase for precision */
     for (unsigned i = 0; i < iterations; ++i) {
         double v = evaluate(t);
+//fprintf(stderr, "release iteration %u: t=%f v=%f vt=%f\n", i + 1, t, v, vrms);
         if (vrms > v) { t2 = t; }
         else { t1 = t; }
         t = (t2 + t1) * 0.5;
@@ -351,6 +360,12 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
         WRITE_REG(0xB0 + n * 3, x[n] >> 8);
     }
 
+    for(unsigned n = 0; n < n_notes; ++n)
+    {
+        fprintf(stderr, "note %u fnum=%u block=%u\n",
+                1 + n, notes[n].fnum, notes[n].block);
+    }
+
     enum { max_algorithms = 6, max_carriers = 3 };
 
     unsigned algorithm = in.getFBConn1() & 1;
@@ -387,12 +402,19 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
         break;
     }
 
+    fprintf(stderr, "algorithm %u carriers {", algorithm);
+    for(unsigned n = 0; n < num_carriers; ++n)
+    {
+        fprintf(stderr, " %u", carriers[n]);
+    }
+    fprintf(stderr, " }\n");
+
     EnvelopeInfo envelopes[max_carriers * max_notes];
     for(unsigned i = 0; i < num_carriers * n_notes; ++i)
     {
         EnvelopeInfo &env = envelopes[i];
         env.note = notes[i / num_carriers];
-        unsigned op = carriers[i];
+        unsigned op = carriers[i % num_carriers];
         env.ar = in.OP[op].attack;
         env.dr = in.OP[op].decay;
         env.sl = in.OP[op].sustain;
@@ -405,10 +427,29 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
         env.wave = in.OP[op].waveform;
     }
 
-    // TODO it's not correct level to check for
-    double solver_attack_time = solve_attack(0.2, envelopes, num_carriers);
-    double solver_release_time = solve_release(0.2, envelopes, num_carriers);
-    double solver_release2_time = solve_release_faster(0.2, envelopes, num_carriers);
+    for(unsigned n = 0; n < num_carriers * n_notes; ++n)
+    {
+        fprintf(stderr, "envelope %u: ", n + 1);
+        print_envelope_info(stderr, envelopes[n]);
+        fprintf(stderr, "\n");
+    }
+
+    double solver_max_amplitude = 0.0;
+    for(unsigned n = 0; n < num_carriers * n_notes; ++n)
+    {
+        EnvelopeInfo &env = envelopes[n];
+        double lmod = level_modifier(env.note, env.tl, env.ksl);
+fprintf(stderr, "LMOD[%u] %f\n", n, lmod);
+        double amp = std::max(1.0 - lmod, 0.0);
+fprintf(stderr, "AMP[%u] %f\n", n, amp);
+        solver_max_amplitude += amp * amp;
+    }
+    solver_max_amplitude = std::sqrt(solver_max_amplitude);
+fprintf(stderr, "AMP TOTAL %f\n", solver_max_amplitude);
+
+    double solver_attack_time = solve_attack(0.2 * solver_max_amplitude, envelopes, num_carriers * n_notes);
+    double solver_release_time = solve_release(0.2 * solver_max_amplitude, envelopes, num_carriers * n_notes);
+    double solver_release2_time = solve_release_faster(0.2 * solver_max_amplitude, envelopes, num_carriers * n_notes);
 
     const unsigned max_silent = 6;
     const unsigned max_on  = 40;
@@ -541,6 +582,8 @@ static void MeasureDurations(FmBank::Instrument *in_p, OPLChipBase *chip)
         result.ms_sound_kon, solver_attack_time * 1000);
     fprintf(stderr, "Release time (ms) %ld real, %f estimate %f estimate2\n",
         result.ms_sound_koff, solver_release_time * 1000, solver_release2_time * 1000);
+    fprintf(stderr, "Max amplitude %f real, %f estimate\n",
+        peak_amplitude_value, solver_max_amplitude);
 
     in.ms_sound_kon = (uint16_t)result.ms_sound_kon;
     in.ms_sound_koff = (uint16_t)result.ms_sound_koff;
