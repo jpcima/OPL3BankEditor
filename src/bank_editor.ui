@@ -3280,7 +3280,7 @@ of second voice</string>
      <x>0</x>
      <y>0</y>
      <width>1117</width>
-     <height>20</height>
+     <height>24</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -3351,6 +3351,7 @@ of second voice</string>
      <addaction name="actionEmulatorDosBox"/>
     </widget>
     <addaction name="menuChoose_chip_emulator"/>
+    <addaction name="actionLatency"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdito"/>
@@ -3540,6 +3541,11 @@ of second voice</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="actionLatency">
+   <property name="text">
+    <string>Audio &amp;latency...</string>
    </property>
   </action>
  </widget>
