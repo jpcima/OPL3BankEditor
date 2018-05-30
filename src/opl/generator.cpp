@@ -127,6 +127,36 @@ static const uint16_t channels1_4op[USED_CHANNELS_4OP] = {0,  1,  2,  9,  10, 11
 //! 4-operator channels map 1
 static const uint16_t channels2_4op[USED_CHANNELS_4OP] = {3,  4,  5,  12, 13, 14};
 
+//! Mapping from MIDI volume level to OPL level value.
+static const uint8_t DMX_volume_mapping_table[128] =
+{
+    0,  1,  3,  5,  6,  8,  10, 11,
+    13, 14, 16, 17, 19, 20, 22, 23,
+    25, 26, 27, 29, 30, 32, 33, 34,
+    36, 37, 39, 41, 43, 45, 47, 49,
+    50, 52, 54, 55, 57, 59, 60, 61,
+    63, 64, 66, 67, 68, 69, 71, 72,
+    73, 74, 75, 76, 77, 79, 80, 81,
+    82, 83, 84, 84, 85, 86, 87, 88,
+    89, 90, 91, 92, 92, 93, 94, 95,
+    96, 96, 97, 98, 99, 99, 100, 101,
+    101, 102, 103, 103, 104, 105, 105, 106,
+    107, 107, 108, 109, 109, 110, 110, 111,
+    112, 112, 113, 113, 114, 114, 115, 115,
+    116, 117, 117, 118, 118, 119, 119, 120,
+    120, 121, 121, 122, 122, 123, 123, 123,
+    124, 124, 125, 125, 126, 126, 127, 127,
+};
+
+//! Mapping from MIDI volume level to OPL level value.
+static const uint8_t W9X_volume_mapping_table[32] =
+{
+    63, 63, 40, 36, 32, 28, 23, 21,
+    19, 17, 15, 14, 13, 12, 11, 10,
+    9,  8,  7,  6,  5,  5,  4,  4,
+    3,  3,  2,  2,  1,  1,  0,  0
+};
+
 QString GeneratorDebugInfo::toStr()
 {
     return QString("Channels:\n"
@@ -376,7 +406,7 @@ void Generator::Pan(uint32_t c, uint32_t value)
         WriteReg(0xC0 + Channels[cc], static_cast<uint8_t>(m_patch.OPS[m_ins[c]].feedconn | value));
 }
 
-void Generator::PlayNoteF(int noteID, uint32_t volume)
+void Generator::PlayNoteF(int noteID, uint32_t volume, uint8_t midivolume, uint8_t midiexpr)
 {
     if(!m_isInstrumentLoaded)
         return;//Deny playing notes without instrument loaded
@@ -405,10 +435,10 @@ void Generator::PlayNoteF(int noteID, uint32_t volume)
         }
     }
 
-    PlayNoteCh(ch, (volume / 2));
+    PlayNoteCh(ch, volume, midivolume, midiexpr);
 }
 
-void Generator::PlayNoteCh(int ch, uint32_t volume)
+void Generator::PlayNoteCh(int ch, uint32_t volume, uint8_t midivolume, uint8_t midiexpr)
 {
     if(!m_isInstrumentLoaded)
         return;//Deny playing notes without instrument loaded
@@ -467,10 +497,12 @@ void Generator::PlayNoteCh(int ch, uint32_t volume)
     if(pseudo_4op || natural_4op)
         Pan(adlchannel[1], 0x30);
 
-    Touch_Real(adlchannel[0], volume);
+    uint32_t chipvolume = getChipVolume(volume, midivolume, midiexpr, m_volmodel);
+
+    Touch_Real(adlchannel[0], chipvolume);
 
     if(pseudo_4op || natural_4op)
-        Touch_Real(adlchannel[1], volume);
+        Touch_Real(adlchannel[1], chipvolume);
 
     bend  = m_bend + m_patch.OPS[i[0]].finetune;
     NoteOn(adlchannel[0], BEND_COEFFICIENT * std::exp(0.057762265 * (tone + bend + phase)));
@@ -703,12 +735,12 @@ void Generator::NoteOffAllChans()
 
 
 
-void Generator::PlayNote(uint32_t volume)
+void Generator::PlayNote(uint32_t volume, uint8_t midivolume, uint8_t midiexpr)
 {
     if(rythmModePercussionMode)
         PlayDrum(testDrum, note);
     else
-        PlayNoteF(note, volume);
+        PlayNoteF(note, volume, midivolume, midiexpr);
 }
 
 void Generator::PlayMajorChord()
@@ -781,7 +813,7 @@ void Generator::PitchBend(int bend)
     {
         const NotesManager::Note &channel = m_noteManager.channel(ch);
         if(channel.note != -1)
-            PlayNoteCh(ch, channel.volume / 2);
+            PlayNoteCh(ch, channel.volume);
     }
 }
 
@@ -940,6 +972,11 @@ void Generator::changeDeepVibrato(bool enabled)
     updateRegBD();
 }
 
+void Generator::changeVolumeModel(int volmodel)
+{
+    m_volmodel = volmodel;
+}
+
 void Generator::changeAdLibPercussion(bool enabled)
 {
     rythmModePercussionMode = uint8_t(enabled);
@@ -950,6 +987,60 @@ void Generator::updateRegBD()
 {
     m_regBD = (deepTremoloMode * 0x80) + (deepVibratoMode * 0x40) + (rythmModePercussionMode * 0x20);
     WriteReg(0x0BD, m_regBD);
+}
+
+uint32_t Generator::getChipVolume(
+    uint32_t vol, uint8_t midivolume, uint8_t midiexpr, int volmodel)
+{
+    uint32_t volume;
+
+    switch(volmodel)
+    {
+    case VOLUME_Linear:
+    {
+        volume = vol * midivolume * midiexpr;
+        volume = volume * 127 / (127 * 127 * 127) / 2;
+    }
+    break;
+
+    default:
+    case VOLUME_Generic:
+    case VOLUME_CMF:
+    {
+        volume = vol * midivolume * midiexpr;
+        // The formula below: SOLVE(V=127^3 * 2^( (A-63.49999) / 8), A)
+        volume = volume > 8725 ? static_cast<uint32_t>(std::log(static_cast<double>(volume)) * 11.541561 + (0.5 - 104.22845)) : 0;
+        // The incorrect formula below: SOLVE(V=127^3 * (2^(A/63)-1), A)
+        //volume = volume>11210 ? 91.61112 * std::log(4.8819E-7*volume + 1.0)+0.5 : 0;
+    }
+    break;
+
+    case VOLUME_DMX:
+    {
+        volume = 2 * ((midivolume * midiexpr) * 127 / 16129) + 1;
+        //volume = 2 * midivolume + 1;
+        volume = ((uint32_t)DMX_volume_mapping_table[(vol < 128) ? vol : 127] * volume) >> 9;
+    }
+    break;
+
+    case VOLUME_APOGEE:
+    {
+        volume = ((midivolume * midiexpr) * 127 / 16129);
+        volume = ((64 * (vol + 0x80)) * volume) >> 15;
+        //volume = ((63 * (vol + 0x80)) * midivolume) >> 15;
+    }
+    break;
+
+    case VOLUME_9X:
+    {
+        //volume = 63 - W9X_volume_mapping_table[(((vol * midivolume /** midiexpr*/) * 127 / 16129 /*2048383*/) >> 2)];
+        volume = 63 - W9X_volume_mapping_table[(((vol * midivolume * midiexpr) * 127 / 2048383) >> 2)];
+        //volume = W9X_volume_mapping_table[vol >> 2] + volume;
+    }
+    break;
+    }
+
+    return volume;
 }
 
 void Generator::generate(int16_t *frames, unsigned nframes)
