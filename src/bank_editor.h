@@ -354,6 +354,13 @@ private slots:
      */
     void on_actionChipsBenchmark_triggered();
 
+#ifdef ENABLE_PLOTS
+    /**
+     * @brief Run the delay analysis of the current instrument
+     */
+    void on_actionDelayAnalysis_triggered();
+#endif
+
     /**
      * @brief Show all supported formats list
      */
