@@ -42,7 +42,7 @@ namespace Ui
 {
     class BankEditor;
 }
-
+class BankModel;
 class Importer;
 
 /**
@@ -77,8 +77,8 @@ public:
     };
 
 private:
-    //! Currently loaded FM bank
-    FmBank              m_bank;
+    //! Model of the currently loaded FM bank
+    BankModel          *m_bankModel;
     //! Backup of currently loaded FM bank
     FmBank              m_bankBackup;
 

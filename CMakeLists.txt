@@ -43,6 +43,7 @@ set(SOURCES
   "src/audio.cpp"
   "src/bank.cpp"
   "src/bank_editor.cpp"
+  "src/bank_model.cpp"
   "src/common.cpp"
   "src/controlls.cpp"
   "src/FileFormats/ffmt_base.cpp"

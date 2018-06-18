@@ -32,6 +32,7 @@
 #include "formats_sup.h"
 #include "bank_editor.h"
 #include "ui_bank_editor.h"
+#include "bank_model.h"
 #include "latency.h"
 #include "ins_names.h"
 #include "main.h"
@@ -115,9 +116,14 @@ BankEditor::BankEditor(QWidget *parent) :
     connect(ui->actionLanguageDefault, SIGNAL(triggered()), this, SLOT(onActionLanguageTriggered()));
 
     loadSettings();
-    m_bank.deep_tremolo = ui->deepTremolo->isChecked();
-    m_bank.deep_vibrato = ui->deepVibrato->isChecked();
-    m_bankBackup = m_bank;
+
+    BankModel *bankModel = m_bankModel = new BankModel(this);
+    FmBank initialBank;
+    initialBank.deep_tremolo = ui->deepTremolo->isChecked();
+    initialBank.deep_vibrato = ui->deepVibrato->isChecked();
+    m_bankBackup = initialBank;
+    bankModel->setBank(initialBank);
+    ui->instruments->setModel(bankModel);
 
     initAudio();
 #ifdef ENABLE_MIDI

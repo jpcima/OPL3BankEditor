@@ -270,7 +270,7 @@
               </layout>
              </item>
              <item>
-              <widget class="QListWidget" name="instruments">
+              <widget class="QListView" name="instruments">
                <property name="sizePolicy">
                 <sizepolicy hsizetype="Ignored" vsizetype="Expanding">
                  <horstretch>0</horstretch>
