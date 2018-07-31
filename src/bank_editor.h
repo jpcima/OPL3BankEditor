@@ -45,6 +45,11 @@ namespace Ui
 
 class Importer;
 
+namespace Ai
+{
+    struct InstrumentClustering;
+};
+
 /**
  * @brief Main application window
  */
@@ -66,6 +71,8 @@ private:
     Generator::OPL_Chips m_currentChip;
     //! Audio latency (ms)
     double m_audioLatency;
+    //! Statistical data set of instruments
+    std::unique_ptr<Ai::InstrumentClustering> m_insClustering;
 
 public:
     //! Audio latency constants (ms)
@@ -428,6 +435,10 @@ private slots:
      * @param checked AdLib BNK mode is turned on
      */
     void on_actionAdLibBnkMode_triggered(bool checked);
+    /**
+     * @brief Randomize current instrument
+     */
+    void on_randomize_clicked();
     /**
      * @brief Opens the latency setting dialog
      */

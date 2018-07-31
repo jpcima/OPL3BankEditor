@@ -92,7 +92,10 @@ set(SOURCES
   "src/opl/chips/dosbox/dbopl.cpp"
   "src/FileFormats/wopl/wopl_file.c"
   "src/opl/chips/nuked_opl3_v174.cpp"
-  "src/opl/chips/nuked/nukedopl3_174.c")
+  "src/opl/chips/nuked/nukedopl3_174.c"
+  "src/opl/ai/adldata.cpp"
+  "src/opl/ai/adldata_private.cpp"
+  "src/opl/ai/statistic.cpp")
 if(ENABLE_PLOTS)
   list(APPEND SOURCES
     "src/delay_analysis.cpp")

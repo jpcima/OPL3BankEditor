@@ -43,6 +43,7 @@
 #include "FileFormats/ffmt_enums.h"
 
 #include "opl/measurer.h"
+#include "opl/ai/statistic.h"
 
 #include "common.h"
 #include "version.h"
@@ -1166,6 +1167,35 @@ void BankEditor::on_actionAdLibBnkMode_triggered(bool checked)
         if(!selected.isEmpty())
             ui->bank_no->setCurrentIndex(selected.front()->data(INS_BANK_ID).toInt());
     }
+}
+
+void BankEditor::on_randomize_clicked()
+{
+    FmBank::Instrument *inst = m_curInst;
+
+    if(!inst)
+    {
+        QMessageBox::information(this,
+                                 tr("Nothing to randomize"),
+                                 tr("No selected instrument to randomize. Please select an instrument first!"));
+        return;
+    }
+
+
+    bool percussive = !ui->melodic->isChecked();
+    double experimental = (double)
+        (ui->randomizeExperimental->value() - ui->randomizeExperimental->minimum()) /
+        (ui->randomizeExperimental->maximum() - ui->randomizeExperimental->minimum());
+
+    Ai::InstrumentClustering *icls = m_insClustering.get();
+    if(!icls) {
+        icls = new Ai::InstrumentClustering(
+            Ai::InstrumentClustering::by_algorithm_and_type());
+        m_insClustering.reset(icls);
+    }
+
+    *inst = icls->generate_from_same_cluster(*inst, percussive, experimental);
+    flushInstrument();
 }
 
 void BankEditor::on_actionLatency_triggered()
