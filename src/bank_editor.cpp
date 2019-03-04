@@ -27,6 +27,7 @@
 #include <QtDebug>
 
 #include "importer.h"
+#include "editchip.h"
 #include "formats_sup.h"
 #include "bank_editor.h"
 #include "ui_bank_editor.h"
@@ -126,6 +127,9 @@ BankEditor::BankEditor(QWidget *parent) :
     connect(ui->actionEmulatorCustom, SIGNAL(triggered()), this, SLOT(toggleEmulator()));
     connect(ui->actionWin9xOPLProxy, SIGNAL(triggered()), this, SLOT(toggleEmulator()));
 
+    m_chipEditor = new ChipEditor(this);
+    connect(m_chipEditor, SIGNAL(editingFinished()), this, SLOT(sendCustomChipProfile()));
+
 #ifdef ENABLE_HW_OPL_PROXY
     m_proxyOpl = &Generator::oplProxy();
 #else
@@ -146,6 +150,8 @@ BankEditor::BankEditor(QWidget *parent) :
     m_bank.deep_tremolo = ui->deepTremolo->isChecked();
     m_bank.deep_vibrato = ui->deepVibrato->isChecked();
     m_bankBackup = m_bank;
+
+    ui->actionEditCustomOPL3->setEnabled(m_currentChip == Generator::CHIP_Custom);
 
     initAudio();
 
@@ -1069,6 +1075,20 @@ void BankEditor::toggleEmulator()
         m_currentChip = Generator::CHIP_Win9xProxy;
         m_generator->ctl_switchChip(m_currentChip);
     }
+
+    m_chipEditor->setVisible(m_currentChip == Generator::CHIP_Custom);
+    ui->actionEditCustomOPL3->setEnabled(m_currentChip == Generator::CHIP_Custom);
+}
+
+void BankEditor::sendCustomChipProfile()
+{
+    m_generator->ctl_sendCustomChipProfile(
+        reinterpret_cast<const CustomChipProfile &>(m_chipEditor->chipProfile()));
+}
+
+void BankEditor::on_actionEditCustomOPL3_triggered()
+{
+    m_chipEditor->show();
 }
 
 

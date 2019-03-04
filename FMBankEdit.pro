@@ -133,6 +133,8 @@ SOURCES += \
     src/importer.cpp \
     src/latency.cpp \
     src/hardware.cpp \
+    src/editchip.cpp \
+    src/waveview.cpp \
     src/ins_names.cpp \
     src/main.cpp \
     src/opl/generator.cpp \
@@ -184,6 +186,8 @@ HEADERS += \
     src/importer.h \
     src/latency.h \
     src/hardware.h \
+    src/editchip.h \
+    src/waveview.h \
     src/ins_names.h \
     src/ins_names_data.h \
     src/main.h \
@@ -216,7 +220,8 @@ HEADERS += \
 FORMS += \
     src/bank_editor.ui \
     src/formats_sup.ui \
-    src/importer.ui
+    src/importer.ui \
+    src/editchip.ui
 
 RESOURCES += \
     src/resources/resources.qrc

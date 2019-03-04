@@ -44,6 +44,7 @@ namespace Ui
 }
 
 class Importer;
+class ChipEditor;
 class QActionGroup;
 
 /**
@@ -57,6 +58,7 @@ class BankEditor : public QMainWindow
 private:
 
     Importer           *m_importer;
+    ChipEditor         *m_chipEditor;
     //! Path for currently opened file
     QString             m_recentPath;
     //! Recently opened bank file
@@ -329,6 +331,15 @@ private slots:
      * @brief Toggle the chip emulator
      */
     void toggleEmulator();
+    /**
+     * @brief Send a custom chip profile
+     */
+    void sendCustomChipProfile();
+
+    /**
+     * @brief Display the chip editor
+     */
+    void on_actionEditCustomOPL3_triggered();
 
     /**
      * @brief Clear all buffers and begin a new bank

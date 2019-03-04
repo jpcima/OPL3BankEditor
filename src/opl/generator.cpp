@@ -220,6 +220,7 @@ Generator::Generator(uint32_t sampleRate, OPL_Chips initialChip)
     rythmModePercussionMode = 0;
     testDrum = 0;//Note ON/OFF of one of legacy percussion channels
 
+    m_profileData.reset(CustomOPL3::newProfileData());
     switchChip(initialChip);
 
     //Send the null patch to initialize the OPL stuff
@@ -292,17 +293,16 @@ void Generator::switchChip(Generator::OPL_Chips chipId)
         chip.reset(new JavaOPL3());
         break;
     case CHIP_Custom:
-        CustomOPL3::ProfileData *pd = m_profileData.get();
-        if(!pd)
-        {
-            pd = CustomOPL3::newProfileData();
-            m_profileData.reset(pd);
-        }
-        chip.reset(new CustomOPL3(*pd));
+        chip.reset(new CustomOPL3(*m_profileData));
         break;
     }
 
     initChip();
+}
+
+void Generator::setCustomChipProfile(const CustomOPL3::ChipProfile &profile)
+{
+    CustomOPL3::setProfile(profile, *m_profileData);
 }
 
 void Generator::WriteReg(uint16_t address, uint8_t byte)

@@ -93,6 +93,8 @@ public:
     void initChip();
     void switchChip(OPL_Chips chipId);
 
+    void setCustomChipProfile(const CustomOPL3::ChipProfile &profile);
+
     void generate(int16_t *frames, unsigned nframes);
 
     /**

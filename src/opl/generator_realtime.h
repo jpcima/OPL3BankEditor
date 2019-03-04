@@ -35,6 +35,7 @@
 
 class Generator;
 struct GeneratorDebugInfo;
+struct CustomChipProfile;
 
 /**
    A control interface which drives a generator from a user interface.
@@ -47,6 +48,7 @@ public:
     virtual ~IRealtimeControl() {}
     virtual void ctl_switchChip(int chipId) = 0;
     virtual void ctl_initChip() = 0;
+    virtual void ctl_sendCustomChipProfile(const CustomChipProfile &profile) = 0;
 
 public slots:
     void changeNote(int note) { m_note = note; }
@@ -121,6 +123,7 @@ public:
     /* Control */
     void ctl_switchChip(int chipId) override;
     void ctl_initChip() override;
+    void ctl_sendCustomChipProfile(const CustomChipProfile &profile) override;
     void ctl_silence() override;
     void ctl_noteOffAllChans() override;
     void ctl_playNote() override;

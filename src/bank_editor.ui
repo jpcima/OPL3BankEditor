@@ -3561,6 +3561,8 @@ of second voice</string>
      <addaction name="actionEmulatorJava"/>
      <addaction name="actionEmulatorCustom"/>
      <addaction name="actionWin9xOPLProxy"/>
+     <addaction name="separator"/>
+     <addaction name="actionEditCustomOPL3"/>
     </widget>
     <addaction name="menuChoose_chip_emulator"/>
     <addaction name="actionLatency"/>
@@ -3843,6 +3845,11 @@ of second voice</string>
    </property>
    <property name="text">
     <string notr="true">Custom DosBox OPL3</string>
+   </property>
+  </action>
+  <action name="actionEditCustomOPL3">
+   <property name="text">
+    <string>Edit custom OPL3...</string>
    </property>
   </action>
  </widget>

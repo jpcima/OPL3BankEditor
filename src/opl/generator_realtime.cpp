@@ -21,10 +21,13 @@
 #include <chrono>
 #include <string.h>
 
+#include "opl/chips/custom_opl3.h" // custom chip profile
+
 enum MessageTag
 {
     MSG_MidiEvent,
     MSG_CtlInitChip,
+    MSG_CtlSendCustomChipProfile,
     MSG_CtlSilence,
     MSG_CtlNoteOffAllChans,
     MSG_CtlPlayNote,
@@ -120,6 +123,15 @@ void RealtimeGenerator::ctl_initChip()
     MessageHeader hdr = {MSG_CtlInitChip, 0};
     wait_for_fifo_write_space(rb, hdr.size);
     rb.put(hdr);
+}
+
+void RealtimeGenerator::ctl_sendCustomChipProfile(const CustomChipProfile &profile)
+{
+    Ring_Buffer &rb = *m_rb_ctl;
+    MessageHeader hdr = {MSG_CtlSendCustomChipProfile, sizeof(CustomOPL3::ChipProfile)};
+    wait_for_fifo_write_space(rb, hdr.size);
+    rb.put(hdr);
+    rb.put(reinterpret_cast<const CustomOPL3::ChipProfile &>(profile));
 }
 
 void RealtimeGenerator::ctl_silence()
@@ -305,6 +317,9 @@ void RealtimeGenerator::rt_message_process(int tag, const uint8_t *data, unsigne
         break;
     case MSG_CtlInitChip:
         gen.initChip();
+        break;
+    case MSG_CtlSendCustomChipProfile:
+        gen.setCustomChipProfile(*(const CustomOPL3::ChipProfile *)data);
         break;
     case MSG_CtlSilence:
         gen.Silence();

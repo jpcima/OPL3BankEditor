@@ -136,6 +136,8 @@ set(SOURCES
   "src/importer.cpp"
   "src/latency.cpp"
   "src/hardware.cpp"
+  "src/editchip.cpp"
+  "src/waveview.cpp"
   "src/ins_names.cpp"
   "src/main.cpp"
   "src/opl/generator.cpp"
@@ -150,7 +152,8 @@ endif()
 set(UIS
   "src/bank_editor.ui"
   "src/formats_sup.ui"
-  "src/importer.ui")
+  "src/importer.ui"
+  "src/editchip.ui")
 if(ENABLE_PLOTS)
   list(APPEND UIS
     "src/delay_analysis.ui")
@@ -200,6 +203,11 @@ target_link_libraries(OPL3BankEditor PRIVATE Qt5::Widgets ${CMAKE_THREAD_LIBS_IN
 if(ENABLE_PLOTS)
   target_link_libraries(OPL3BankEditor PRIVATE ${QWT_LIBRARIES})
 endif()
+
+find_package(Lua REQUIRED)
+target_link_libraries(OPL3BankEditor PRIVATE ${LUA_LIBRARIES})
+target_include_directories(OPL3BankEditor PRIVATE "${LUA_INCLUDE_DIR}")
+
 install(TARGETS OPL3BankEditor DESTINATION "bin" RENAME "opl3_bank_editor")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
