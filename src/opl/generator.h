@@ -25,6 +25,7 @@
 #include <QObject>
 
 #include "chips/opl_chip_base.h"
+#include "chips/custom_opl3.h"
 #include "../bank.h"
 
 #ifdef ENABLE_HW_OPL_PROXY
@@ -83,6 +84,7 @@ public:
         CHIP_DosBox,
         CHIP_Opal,
         CHIP_Java,
+        CHIP_Custom,
         CHIP_Win9xProxy
     };
     Generator(uint32_t sampleRate, OPL_Chips initialChip);
@@ -263,6 +265,9 @@ private:
     uint16_t    m_ins[NUM_OF_CHANNELS];
     //! value poked to B0, cached, needed by NoteOff)(
     uint8_t     m_keyBlockFNumCache[NUM_OF_CHANNELS];
+
+    //! custom chip profile data
+    std::unique_ptr<CustomOPL3::ProfileData, CustomOPL3::ProfileDeleter> m_profileData;
 };
 
 #endif // GENERATOR_H

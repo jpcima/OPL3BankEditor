@@ -100,10 +100,12 @@ set(CHIPS_SOURCES
   "src/opl/chips/java_opl3.cpp"
   "src/opl/chips/nuked_opl3.cpp"
   "src/opl/chips/opal_opl3.cpp"
+  "src/opl/chips/custom_opl3.cpp"
   "src/opl/chips/nuked/nukedopl3.c"
   "src/opl/chips/dosbox/dbopl.cpp"
   "src/opl/chips/nuked_opl3_v174.cpp"
-  "src/opl/chips/nuked/nukedopl3_174.c")
+  "src/opl/chips/nuked/nukedopl3_174.c"
+  "src/opl/chips/custom/dboplEX.cpp")
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   list(APPEND CHIPS_SOURCES "src/opl/chips/win9x_opl_proxy.cpp")
 endif()

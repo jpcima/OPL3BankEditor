@@ -25,6 +25,7 @@
 #include "chips/dosbox_opl3.h"
 #include "chips/opal_opl3.h"
 #include "chips/java_opl3.h"
+#include "chips/custom_opl3.h"
 
 #ifdef ENABLE_HW_OPL_PROXY
 #include "chips/win9x_opl_proxy.h"
@@ -289,6 +290,15 @@ void Generator::switchChip(Generator::OPL_Chips chipId)
         break;
     case CHIP_Java:
         chip.reset(new JavaOPL3());
+        break;
+    case CHIP_Custom:
+        CustomOPL3::ProfileData *pd = m_profileData.get();
+        if(!pd)
+        {
+            pd = CustomOPL3::newProfileData();
+            m_profileData.reset(pd);
+        }
+        chip.reset(new CustomOPL3(*pd));
         break;
     }
 

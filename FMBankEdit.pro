@@ -144,11 +144,13 @@ SOURCES += \
     src/opl/chips/java_opl3.cpp \
     src/opl/chips/nuked_opl3.cpp \
     src/opl/chips/opal_opl3.cpp \
+    src/opl/chips/custom_opl3.cpp \
     src/opl/chips/nuked/nukedopl3.c \
     src/opl/chips/dosbox/dbopl.cpp \
     src/FileFormats/wopl/wopl_file.c \
     src/opl/chips/nuked_opl3_v174.cpp \
-    src/opl/chips/nuked/nukedopl3_174.c
+    src/opl/chips/nuked/nukedopl3_174.c \
+    src/opl/chips/custom/dboplEX.cpp
 
 HEADERS += \
     src/bank_editor.h \
@@ -199,6 +201,7 @@ HEADERS += \
     src/opl/chips/java_opl3.h \
     src/opl/chips/nuked_opl3.h \
     src/opl/chips/opal_opl3.h \
+    src/opl/chips/custom_opl3.h \
     src/opl/chips/opl_chip_base.h \
     src/opl/chips/java/JavaOPL3.hpp \
     src/opl/chips/nuked/nukedopl3.h \
@@ -206,7 +209,9 @@ HEADERS += \
     src/opl/chips/dosbox/dbopl.h \
     src/FileFormats/wopl/wopl_file.h \
     src/opl/chips/nuked_opl3_v174.h \
-    src/opl/chips/nuked/nukedopl3_174.h
+    src/opl/chips/nuked/nukedopl3_174.h \
+    src/opl/chips/custom/dboplEX.h \
+    src/opl/chips/custom/dboplEXwaverom.h
 
 FORMS += \
     src/bank_editor.ui \
